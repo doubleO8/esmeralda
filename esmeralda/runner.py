@@ -211,7 +211,7 @@ class AnsibleRunWrapper(object):
 
             # Create a temporary file and write the template string to it
             hosts = NamedTemporaryFile(delete=False)
-            hosts.write(rendered_inventory)
+            hosts.write(rendered_inventory.encode('utf-8'))
             hosts.close()
             kwargs['inventory_path'] = hosts.name
         else:
@@ -223,15 +223,3 @@ class AnsibleRunWrapper(object):
         except Exception as exc:
             self.log.error("Failed to run: {!s}".format(exc))
             return False
-
-
-if __name__ == '__main__':
-    logging.basicConfig(level=logging.INFO,
-                        format='%(asctime)s %(levelname)-8s %(message)s',
-                        datefmt='%Y-%m-%d %H:%M:%S')
-    # logging.basicConfig(loglevel=logging.DEBUG)
-    db_url = 'http://donny:Dimpfelmoser89Lima@localhost:55984/time_out'
-    toc = TimeOutController(db_url=db_url)
-    toc.in_timeout('hatsnet')
-    toc.set_timeout("bla")
-    toc.in_timeout('bla')
