@@ -10,7 +10,7 @@ Welcome to Esmeralda's documentation!
    :maxdepth: 2
    :caption: Contents:
 
-
+   esmeralda
 
 Indices and tables
 ==================
