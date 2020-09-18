@@ -87,7 +87,11 @@ class Dispatcher(QueueWorkerSkeleton):
         try:
             inventory_hostname = payload['identity']['inventory_hostname']
         except KeyError:
-            inventory_hostname = payload['inventory_hostname']
+            try:
+                inventory_hostname = payload['inventory_hostname']
+            except KeyError:
+                self.log.error("Inventory hostname is mandatory!")
+                return False
 
         identity = payload.get('identity')
         if identity is None:
@@ -129,22 +133,42 @@ class AnsibleExecutor(QueueWorkerSkeleton):
         To be implemented by deriving classes.
         """
         wrap = AnsibleRunWrapper()
+        run_args = dict()
+        inventory_hostname = None
 
         try:
             inventory_hostname = payload['identity']['inventory_hostname']
         except KeyError:
-            inventory_hostname = payload['inventory_hostname']
+            try:
+                inventory_hostname = payload['inventory_hostname']
+            except KeyError:
+                pass
 
-        run_args = dict(
-            inventory_hostname=inventory_hostname,
-            playbook=kwargs.get("playbook"),
-            inventory=kwargs.get("inventory"),
-        )
+        if inventory_hostname:
+            run_args['inventory_hostname'] = inventory_hostname
 
-        rv = wrap.run(**run_args)
+        for override in ('playbook_path', 'inventory_path'):
+            if payload.get(override):
+                run_args[override] = payload[override]
 
-        if rv is not False:
+        a_run_result = wrap.run(**run_args)
+
+        if a_run_result is not False:
+            rc, result = a_run_result
+            self.log.info("RC={!r}".format(rc))
+
+            try:
+                self.log.info("STATS:")
+                self.log.info(result.get("stats"))
+            except Exception as exc:
+                self.log.warning(
+                    "Running with {!r} did not provide "
+                    "status information! ({!s})".format(run_args, exc))
+
             return True
+        else:
+            self.log.warning(
+                "Running with {!r} failed miserably ...".format(run_args))
 
         return False
 
@@ -217,13 +241,13 @@ class AnsibleRunWrapper(object):
         proc = subprocess.run(call_args, stdout=PIPE, stderr=PIPE,
                               cwd=self.ansible_root_path)
 
+        rc = proc.returncode
+        result = None
+
         try:
             result = json.loads(proc.stdout)
         except Exception as exc:
             self.log.error("Failed to parse STDOUT: {!s}".format(exc))
-            result = None
-
-        rc = proc.returncode
 
         if self.verbose:
             self.log.info("RC={!r}".format(rc))
