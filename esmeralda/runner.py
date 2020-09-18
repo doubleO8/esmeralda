@@ -153,6 +153,7 @@ class AnsibleRunWrapper(object):
     """
     Controller for running ansible playbook.
     """
+
     def __init__(self, *args, **kwargs):
         self.log = logging.getLogger(__name__)
         self.ansible_root_path = kwargs.get(
@@ -233,6 +234,38 @@ class AnsibleRunWrapper(object):
 
         return rc, result
 
+    def generate_inventory(self, inventory_hostname):
+        """
+        Generate an ansible inventory file for given hostname.
+
+        Args:
+            inventory_hostname: hostname or IP address
+
+        Returns:
+            str: inventory file path
+        """
+        self.log.debug(
+            "Generating inventory file for {!r}".format(inventory_hostname))
+
+        inventory_template = Environment(
+            loader=BaseLoader).from_string(INVENTORY_TEMPLATE)
+
+        rendered_inventory = inventory_template.render({
+            'inventory_hostname': inventory_hostname,
+            'group_name': 'victims'
+        })
+
+        # Create a temporary file and write the template string to it
+        hosts = NamedTemporaryFile(delete=False)
+        hosts.write(rendered_inventory.encode('utf-8'))
+        hosts.close()
+
+        self.log.debug(
+            "Generated inventory file for {!s}: {!s}".format(
+                inventory_hostname, hosts.name))
+
+        return hosts.name
+
     def run(self, **kwargs):
         """
         Run an ansible playbook with given parameters.
@@ -246,19 +279,14 @@ class AnsibleRunWrapper(object):
             tuple: return code and STDOUT or ``False`` on severe error
         """
         if kwargs.get("inventory_hostname"):
-            inventory_template = Environment(
-                loader=BaseLoader).from_string(INVENTORY_TEMPLATE)
-            rendered_inventory = inventory_template.render({
-                'inventory_hostname': kwargs["inventory_hostname"],
-                'group_name': 'victims'
-            })
+            try:
+                kwargs['inventory_path'] = self.generate_inventory(
+                    kwargs.get("inventory_hostname"))
+            except Exception as exc:
+                self.log.error(
+                    "Failed to generate inventory file: {!s}".format(exc))
 
-            # Create a temporary file and write the template string to it
-            hosts = NamedTemporaryFile(delete=False)
-            hosts.write(rendered_inventory.encode('utf-8'))
-            hosts.close()
-
-            kwargs['inventory_path'] = hosts.name
+                return False
 
             self.log.debug("Inventory hostname: {!r}".format(
                 kwargs.get("inventory_hostname")))
