@@ -208,20 +208,20 @@ class AnsibleRunWrapper(object):
             "Playbook {playbook_path}, inventory {inventory_path}".format(
                 playbook_path=playbook_path, inventory_path=inventory_path))
 
-        if not os.path.exists(self.ansible_root_path):
+        if not os.path.exists(os.path.abspath(self.ansible_root_path)):
             self.log.warning("Ansible root {p!r} does not exist!".format(
                 p=self.ansible_root_path))
 
-        if not os.path.exists(self.ansible_config_path):
+        if not os.path.exists(os.path.abspath(self.ansible_config_path)):
             self.log.warning(
                 "Ansible configuration file {p!r} does not exist!".format(
                     p=self.ansible_config_path))
 
-        if not os.path.exists(playbook_path):
+        if not os.path.exists(os.path.abspath(playbook_path)):
             self.log.warning(
                 "Playbook file {p!r} does not exist!".format(p=playbook_path))
 
-        if not os.path.exists(inventory_path):
+        if not os.path.exists(os.path.abspath(inventory_path)):
             self.log.warning(
                 "Inventory file {p!r} does not exist!".format(
                     p=inventory_path))
