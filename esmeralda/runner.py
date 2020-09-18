@@ -194,6 +194,8 @@ class AnsibleRunWrapper(object):
             self.verbose = 0
 
     def _run(self, **kwargs):
+        os.chdir(self.ansible_root_path)
+
         playbook_path = kwargs.get(
             "playbook_path",
             os.path.join(self.ansible_root_path, ESMERALDA_CONFIG['playbook'])
