@@ -111,7 +111,15 @@ class Dispatcher(QueueWorkerSkeleton):
 
         toc.set_timeout(inventory_hostname)
 
-        self.log.info("Dispatching update request ... ")
+        u_now = pendulum.now(pendulum.UTC)
+        message_id = "{prefix}_{inventory_hostname}_{dt}".format(
+            prefix="a",
+            inventory_hostname=inventory_hostname,
+            dt=u_now.format("YYYY-MM-DD_hhmmss")
+        )
+        self.log.info("Dispatching update request {:s} ... ".format(message_id))
+        payload['message_id'] = message_id
+        payload['dispatch_dt'] = u_now.to_iso8601_string()
         self.add_to_queue(payload, queue=ESMERALDA_CONFIG['dispatch_queue'])
 
         return True
@@ -127,6 +135,22 @@ class AnsibleExecutor(QueueWorkerSkeleton):
             queue_declare_arguments=kwargs.get('queue_declare_arguments'),
             *args, **kwargs)
 
+    def persist_report(self, message_id, report, **kwargs):
+        db_url = kwargs.get("db_url", ESMERALDA_CONFIG['run_reports_url'])
+
+        if not message_id:
+            self.log.warning("No message ID, no reporting.")
+            return False
+
+        try:
+            reporter = CloudiControl(db_url)
+            reporter[message_id] = report
+            return True
+        except Exception as exc:
+            self.log.error("Failed to persist report: {!s}".format(exc))
+
+        return False
+
     def _handle_request(self, payload, **kwargs):
         """
         Message/request handling function.
@@ -135,6 +159,7 @@ class AnsibleExecutor(QueueWorkerSkeleton):
         wrap = AnsibleRunWrapper()
         run_args = dict()
         inventory_hostname = None
+        message_id = payload.get("message_id")
 
         try:
             inventory_hostname = payload['identity']['inventory_hostname']
@@ -151,10 +176,20 @@ class AnsibleExecutor(QueueWorkerSkeleton):
             if payload.get(override):
                 run_args[override] = payload[override]
 
+        self.log.info("Ansible run {!r}".format(message_id))
+
         a_run_result = wrap.run(**run_args)
+
+        report = dict(
+            ansible_rc=None,
+            ansible_result=None,
+            ansible_run_args=run_args,
+        )
 
         if a_run_result is not False:
             rc, result = a_run_result
+            report['ansible_rc'] = rc
+            report['ansible_result'] = result
             self.log.info("RC={!r}".format(rc))
 
             try:
@@ -165,10 +200,14 @@ class AnsibleExecutor(QueueWorkerSkeleton):
                     "Running with {!r} did not provide "
                     "status information! ({!s})".format(run_args, exc))
 
+            self.persist_report(message_id, report)
+
             return True
         else:
             self.log.warning(
                 "Running with {!r} failed miserably ...".format(run_args))
+
+        self.persist_report(message_id, report)
 
         return False
 

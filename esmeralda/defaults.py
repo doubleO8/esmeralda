@@ -4,6 +4,7 @@ import os
 
 ESMERALDA_CONFIG = dict(
     time_out_url='http://time:out@localhost:5984/time_out',
+    run_reports_url='http://time:out@localhost:5984/run_reports',
     ansible_root_path=os.path.join(
         os.environ.get("HOME", ''), "ansible-playbooks"),
     ansible_playbook_binary="/usr/bin/ansible-playbook",
