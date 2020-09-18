@@ -21,19 +21,13 @@ INVENTORY_TEMPLATE = """[{{ group_name }}]
 {{ inventory_hostname }}
 """
 
-FALLBACK_ANSIBLE_CFG_REL = 'etc/ansible.cfg'
-
-FALLBACK_INVENTORY = 'etc/00-merged-dummy'
-
-FALLBACK_PLAYBOOK = 'information-dumping.yml'
-
 
 def setup_ansible_environment(**kwargs):
     ansible_root_path = kwargs.get(
         "ansible_root_path", ESMERALDA_CONFIG['ansible_root_path'])
     ansible_config_path = kwargs.get(
         "ansible_config_path",
-        os.path.join(ansible_root_path, FALLBACK_ANSIBLE_CFG_REL))
+        os.path.join(ansible_root_path, ESMERALDA_CONFIG['ansible_config']))
 
     os.environ['ANSIBLE_CONFIG'] = ansible_config_path
     os.environ['ANSIBLE_STDOUT_CALLBACK'] = 'json'
@@ -141,7 +135,13 @@ class AnsibleExecutor(QueueWorkerSkeleton):
         except KeyError:
             inventory_hostname = payload['inventory_hostname']
 
-        rv = wrap.run(inventory_hostname=inventory_hostname)
+        run_args = dict(
+            inventory_hostname=inventory_hostname,
+            playbook=kwargs.get("playbook"),
+            inventory=kwargs.get("inventory"),
+        )
+
+        rv = wrap.run(**run_args)
 
         if rv is not False:
             return True
@@ -150,13 +150,18 @@ class AnsibleExecutor(QueueWorkerSkeleton):
 
 
 class AnsibleRunWrapper(object):
+    """
+    Controller for running ansible playbook.
+    """
     def __init__(self, *args, **kwargs):
         self.log = logging.getLogger(__name__)
         self.ansible_root_path = kwargs.get(
             "ansible_root_path", ESMERALDA_CONFIG['ansible_root_path'])
         self.ansible_config_path = kwargs.get(
             "ansible_config_path",
-            os.path.join(self.ansible_root_path, FALLBACK_ANSIBLE_CFG_REL))
+            os.path.join(
+                self.ansible_root_path, ESMERALDA_CONFIG['ansible_config'])
+        )
 
         try:
             self.verbose = int(kwargs.get("verbose"))
@@ -166,13 +171,35 @@ class AnsibleRunWrapper(object):
     def _run(self, **kwargs):
         playbook_path = kwargs.get(
             "playbook_path",
-            os.path.join(self.ansible_root_path, FALLBACK_PLAYBOOK)
+            os.path.join(self.ansible_root_path, ESMERALDA_CONFIG['playbook'])
         )
 
         inventory_path = kwargs.get(
             "inventory_path",
-            os.path.join(self.ansible_root_path, FALLBACK_INVENTORY)
+            os.path.join(self.ansible_root_path, ESMERALDA_CONFIG['inventory'])
         )
+
+        self.log.debug(
+            "Playbook {playbook_path}, inventory {inventory_path}".format(
+                playbook_path=playbook_path, inventory_path=inventory_path))
+
+        if not os.path.exists(self.ansible_root_path):
+            self.log.warning("Ansible root {p!r} does not exist!".format(
+                p=self.ansible_root_path))
+
+        if not os.path.exists(self.ansible_config_path):
+            self.log.warning(
+                "Ansible configuration file {p!r} does not exist!".format(
+                    p=self.ansible_config_path))
+
+        if not os.path.exists(playbook_path):
+            self.log.warning(
+                "Playbook file {p!r} does not exist!".format(p=playbook_path))
+
+        if not os.path.exists(inventory_path):
+            self.log.warning(
+                "Inventory file {p!r} does not exist!".format(
+                    p=inventory_path))
 
         setup_ansible_environment(ansible_root_path=self.ansible_root_path,
                                   ansible_config_path=self.ansible_config_path)
@@ -188,19 +215,36 @@ class AnsibleRunWrapper(object):
 
         proc = subprocess.run(call_args, stdout=PIPE, stderr=PIPE,
                               cwd=self.ansible_root_path)
-        result = json.loads(proc.stdout)
+
+        try:
+            result = json.loads(proc.stdout)
+        except Exception as exc:
+            self.log.error("Failed to parse STDOUT: {!s}".format(exc))
+            result = None
+
         rc = proc.returncode
 
         if self.verbose:
             self.log.info("RC={!r}".format(rc))
 
-            if self.verbose >= 10:
+            if self.verbose >= 10 and result is not None:
                 for line in json.dumps(result, indent=2).split("\n"):
                     self.log.info(line)
 
         return rc, result
 
     def run(self, **kwargs):
+        """
+        Run an ansible playbook with given parameters.
+
+        Keyword Args:
+            inventory_hostname (str, optional): target (host or IP address)
+            playbook_path (str, optional): playbook override
+            inventory_path (str, optional): inventory override
+
+        Returns:
+            tuple: return code and STDOUT or ``False`` on severe error
+        """
         if kwargs.get("inventory_hostname"):
             inventory_template = Environment(
                 loader=BaseLoader).from_string(INVENTORY_TEMPLATE)
@@ -213,13 +257,17 @@ class AnsibleRunWrapper(object):
             hosts = NamedTemporaryFile(delete=False)
             hosts.write(rendered_inventory.encode('utf-8'))
             hosts.close()
+
             kwargs['inventory_path'] = hosts.name
+
+            self.log.debug("Inventory hostname: {!r}".format(
+                kwargs.get("inventory_hostname")))
         else:
-            self.log.warning(
-                "No inventory_hostname! Using default inventory path!")
+            self.log.debug("No inventory hostname given ...")
 
         try:
             return self._run(**kwargs)
         except Exception as exc:
             self.log.error("Failed to run: {!s}".format(exc))
-            return False
+
+        return False
