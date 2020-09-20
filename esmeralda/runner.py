@@ -1,5 +1,9 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
+"""
+Controller classes and helper functions for message queue based running of
+(ansible) tasks.
+"""
 import os
 import logging
 import subprocess
@@ -15,14 +19,25 @@ from jinja2 import Environment, BaseLoader
 
 from esmeralda.defaults import ESMERALDA_CONFIG
 
+#: default *time out* duration
 TIME_OUT_DEFAULT = pendulum.Duration(hours=1)
 
+#: single host inventory file template
 INVENTORY_TEMPLATE = """[{{ group_name }}]
 {{ inventory_hostname }}
 """
 
 
 def setup_ansible_environment(**kwargs):
+    """
+    Set ansible environment variables for running a playbook.
+    Values for omitted keyword arguments will fall back to their corresponding
+    :py:data:`esmeralda.defaults.ESMERALDA_CONFIG` key/value pair.
+
+    Keyword Args:
+        ansible_root_path(str, optional): Path of playbooks and roles
+        ansible_config_path(str, optional): (relative) Path of ansible configuration file
+    """
     ansible_root_path = kwargs.get(
         "ansible_root_path", ESMERALDA_CONFIG['ansible_root_path'])
     ansible_config_path = kwargs.get(
@@ -103,6 +118,11 @@ class TimeOutController(object):
 
 
 class Dispatcher(QueueWorkerSkeleton):
+    """
+    Controller for dispatching ansible run requests on a per hostname basis.
+    Honours hosts being in *time out*. If a host is marked as *in time out* no
+    new ansible run request will be dispatched.
+    """
     def __init__(self, *args, **kwargs):
         amqp_port = kwargs.get("amqp_port", ESMERALDA_CONFIG['amqp_port'])
 
@@ -159,6 +179,9 @@ class Dispatcher(QueueWorkerSkeleton):
 
 
 class AnsibleExecutor(QueueWorkerSkeleton):
+    """
+    Controller for running ansible tasks posted to message queue.
+    """
     def __init__(self, *args, **kwargs):
         amqp_port = kwargs.get("amqp_port", ESMERALDA_CONFIG['amqp_port'])
 
