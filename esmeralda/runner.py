@@ -34,12 +34,34 @@ def setup_ansible_environment(**kwargs):
 
 
 class TimeOutController(object):
+    """
+    Controller for managing *time outs* of items. An item can be marked as
+    *in time out* - it is up to the caller to e.g. refuse taking actions based
+    on the fact that an item is currently in time out.
+
+    Attributes:
+        log (logging.Logger): logger instance
+        cc (djali.couchdb.CloudiControl): persistence layer controller instance
+
+    Keyword Args:
+        db_url (str, optional): CouchDB URL
+    """
     def __init__(self, *args, **kwargs):
         self.log = logging.getLogger(__name__)
         db_url = kwargs.get("db_url", ESMERALDA_CONFIG['time_out_url'])
         self.cc = CloudiControl(db_url)
 
     def set_timeout(self, key, time_out=None):
+        """
+        Mark an item (e.g. a hostname) as *in time out*.
+
+        Args:
+            key (str): item/hostname identifier
+            time_out (datetime.timedelta, optional):
+
+        Returns:
+            datetime.datetime: end of timeout
+        """
         if time_out is None:
             time_out = TIME_OUT_DEFAULT
 
@@ -52,7 +74,18 @@ class TimeOutController(object):
         self.log.info("{key} will be in time out until {time_out}".format(
             key=key, **doc))
 
+        return blocked_until
+
     def in_timeout(self, key):
+        """
+        Check if an item (e.g. a hostname) is currently ìn *time out*.
+
+        Args:
+            key (str): item/hostname identifier
+
+        Returns:
+            bool: ``True`` if item is considered *in time out*.
+        """
         try:
             doc = self.cc[key]
         except KeyError:
@@ -341,7 +374,7 @@ class AnsibleRunWrapper(object):
             inventory_path (str, optional): inventory override
 
         Returns:
-            tuple: return code and STDOUT or ``False`` on severe error
+            tuple: return code and parsed STDOUT or ``False`` on severe error
         """
         if kwargs.get("inventory_hostname"):
             try:
