@@ -189,10 +189,16 @@ class AnsibleExecutor(QueueWorkerSkeleton):
     def __init__(self, *args, **kwargs):
         amqp_port = kwargs.get("amqp_port", ESMERALDA_CONFIG['amqp_port'])
 
+        try:
+            self.verbose = int(kwargs.get("verbose"))
+        except Exception:
+            self.verbose = 0
+
         super().__init__(
             self,
             port=amqp_port,
             *args, **kwargs)
+
 
     def persist_report(self, message_id, report, **kwargs):
         db_url = kwargs.get("db_url", ESMERALDA_CONFIG['run_reports_url'])
@@ -215,7 +221,7 @@ class AnsibleExecutor(QueueWorkerSkeleton):
         Message/request handling function.
         To be implemented by deriving classes.
         """
-        wrap = AnsibleRunWrapper()
+        wrap = AnsibleRunWrapper(verbose=self.verbose)
         run_args = dict()
         inventory_hostname = None
         message_id = payload.get("message_id")
