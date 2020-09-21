@@ -47,6 +47,11 @@ def setup_ansible_environment(**kwargs):
     os.environ['ANSIBLE_CONFIG'] = ansible_config_path
     os.environ['ANSIBLE_STDOUT_CALLBACK'] = 'json'
 
+    if kwargs.get("do_debug"):
+        os.environ['ANSIBLE_LOG_PATH'] = '/tmp/esmeralda_ansible_debug.log'
+        os.environ['ANSIBLE_DEBUG'] = 'True'
+
+
 
 class TimeOutController(object):
     """
@@ -343,6 +348,11 @@ class AnsibleRunWrapper(object):
             result = json.loads(proc.stdout)
         except Exception as exc:
             self.log.error("Failed to parse STDOUT: {!s}".format(exc))
+            try:
+                for x in proc.stdout.decode('utf-8').split("\n"):
+                    self.log.error(x)
+            except Exception as exc2:
+                self.log.error(exc2)
 
         if self.verbose:
             self.log.info("RC={!r}".format(rc))
