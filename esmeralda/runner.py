@@ -129,7 +129,6 @@ class Dispatcher(QueueWorkerSkeleton):
         super().__init__(
             self,
             port=amqp_port,
-            queue_declare_arguments=kwargs.get('queue_declare_arguments'),
             *args, **kwargs)
 
     def _handle_request(self, payload, **kwargs):
@@ -188,7 +187,6 @@ class AnsibleExecutor(QueueWorkerSkeleton):
         super().__init__(
             self,
             port=amqp_port,
-            queue_declare_arguments=kwargs.get('queue_declare_arguments'),
             *args, **kwargs)
 
     def persist_report(self, message_id, report, **kwargs):
