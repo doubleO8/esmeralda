@@ -121,6 +121,18 @@ class TimeOutController(object):
 
         return u_now < blocked_until
 
+    def clear_timeout(self, key):
+        """
+        Stop *time out* of an item (e.g. a hostname).
+
+        Args:
+            key (str): item/hostname identifier
+        """
+        try:
+            del self.cc[key]
+        except KeyError:
+            self.log.info("{key} was not in time out".format(key=key))
+
 
 class Dispatcher(QueueWorkerSkeleton):
     """
