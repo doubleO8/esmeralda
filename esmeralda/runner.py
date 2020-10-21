@@ -219,6 +219,8 @@ class AnsibleExecutor(QueueWorkerSkeleton):
             self.log.warning("No message ID, no reporting.")
             return False
 
+        report['dt'] = pendulum.now(pendulum.UTC).to_iso8601_string()
+
         try:
             reporter = CloudiControl(db_url)
             reporter[message_id] = report
